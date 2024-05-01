@@ -2,36 +2,36 @@ import os
 import openai
 import sys
 import subprocess
+import argparse
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+parser = argparse.ArgumentParser(description="Translate unix commands to powershell commands")
 
-command = None
-dry_run = False
-debug = False
-if (len(sys.argv) > 1):
-  for i in range(1, len(sys.argv)):
-    if (sys.argv[i] == "--dry-run"):
-      dry_run = True
-      continue
-    if (sys.argv[i] == "--debug"):
-      debug = True
-      continue
-    elif (command is None):
-      command = sys.argv[i]
-    else:
-      command = command + " " + sys.argv[i]
-else:
-  raise Exception("Please provide a command")
+parser.add_argument('-v', '--verbose', action="store_true",
+                    default=False,
+                    help='print verbose information')
+parser.add_argument('--dry-run', action='store_true',
+                    default=False,
+                    help='print powershell command without executing it')
+parser.add_argument('command', type=str, nargs='+',
+                    help='command to translate')
 
-if debug:
+args = parser.parse_args()
+
+
+command = " ".join(args.command)
+dry_run = args.dry_run
+verbose = args.verbose
+
+if verbose:
+  print("args:", args)
   print("input:", command)
 
-response = openai.ChatCompletion.create(
-  model="gpt-3.5-turbo",
+client = openai.OpenAI(api_key=os.environ['OPENAI_API_KEY'])
+response = client.chat.completions.create(model="gpt-3.5-turbo",
   messages=[
     {
       "role": "system",
-      "content": "you translate unix commands to the equivalent in powershell. you only provide the command without any additional texts.\n\nIf the user input is not a valid or unknown unix command, you return \"error\""
+      "content": "you translate unix commands to the equivalent in powershell. you only provide the command without any additional texts.\n\nIf the user input is not a valid or unknown unix command, you return \"error\" with suggestions"
     },
     {
       "role": "user",
@@ -48,6 +48,6 @@ response = openai.ChatCompletion.create(
 powershell_command = response.choices[0].message.content
 print(powershell_command)
 
-if not dry_run:
+if not dry_run and "error" not in powershell_command:
   result = subprocess.run(["powershell", "-Command", powershell_command], capture_output=True)
   print(result.stdout.decode("utf-8"))
